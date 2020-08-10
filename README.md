@@ -1,3 +1,3 @@
 # Multivariate_Regression
 
-Multivariante regression with different strategies for features selection.  
+Multivariante regression with different methods for features selection.  
