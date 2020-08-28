@@ -60,6 +60,7 @@ df=pd.DataFrame(longline,columns=titlelist)
 df.to_csv('BostonHausing.csv',index=False)
 '''
 ##### READ DATA
+
 dataframe=pd.read_csv('BostonHausing.csv')
 '''
 #### NORMALITY TEST
@@ -166,6 +167,24 @@ print("Optimum number of features: %d" %nof)
 print("Score with %d features: %f" % (nof, r_sq))
 
 '''
+#######   Build the Multivariate Linear Regression Model
+### LIST WITH FEATURES
+#listnames = ['CRIM', 'ZN', 'AGE', 'DIS', 'RAD', 'LSTAT']
+listnames = ['CRIM','ZN','INDUS','CHAS','NOX','RM','AGE','DIS','RAD','TAX','PTRATIO','B','LSTAT']
+
+### FEATURE SELECTION WITH SelectFromModel  threshold ?????
+X = dataframe[listnames]
+Y = dataframe['MEDV']
+x_train, x_test, y_train, y_test = train_test_split(X,Y, test_size = 0.2, random_state = 0)
+model = linear_model.LinearRegression()
+selector = feature_selection.SelectFromModel(estimator=model).fit(x_train, y_train)
+resu = selector.get_support()
+print(selector.threshold_)
+step2factors=[]
+for ix in range(len(X.columns)):
+    print(X.columns[ix],resu[ix])
+
+
 ### FIT DATA
 #listnames = ['CRIM','ZN','INDUS','CHAS','NOX','RM','AGE','DIS','RAD','TAX','PTRATIO','B','LSTAT']
 listnames = ['CRIM', 'ZN', 'AGE', 'DIS', 'RAD', 'LSTAT']
