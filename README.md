@@ -1,3 +1,3 @@
 # Multivariate_Regression
 
-Multivariante regression with different methods for features selection.  
+correction by using adaboostregressior
