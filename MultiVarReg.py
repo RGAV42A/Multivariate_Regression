@@ -1,3 +1,9 @@
+import subprocess
+
+out = subprocess.run(['/bin/bash', '-c','dir'],shell=True)
+print(out)
+
+
 import pandas as pd
 import numpy as np
 #from pylab import *
@@ -12,56 +18,15 @@ from sklearn import metrics
 from sklearn.model_selection import train_test_split
 import scipy.stats as stats
 from sklearn.feature_selection import RFE
-
 ###########################################################
 
 ### Multivariate Regression  #####
-'''
-### data preprocessing
-i=0
-linelist=[]
-titlelist=[]
-path='BostonHousingDataset.txt'
-hand=open(path)
-### read name columns
-for line in hand:
-    line=line.rstrip()
-    if i>6:
-        linesp=line.split()
-        #print(linesp[0])
-        titlelist.append(linesp[0])
-    if i>19:  break
-    i+=1
-#print('titlelist',len(titlelist))
 
-###  read and merge data
-j=0
-shortline=[]
-longline=[]
-for line in hand:
-    line=line.rstrip()
-    linesp=line.split()
-    #print(linesp)
-    if len(linesp)>0:
-        shortline.append(linesp)
-
-
-    #print(linesp)
-    #if j>106: break
-    #j+=1
-for k in range(0,len(shortline)-1,2):
-    ges=shortline[k]+shortline[k+1]
-    longline.append(ges)
-    #print(len(ges))
-#print(longline)
-
-df=pd.DataFrame(longline,columns=titlelist)
-
-df.to_csv('BostonHausing.csv',index=False)
-'''
 ##### READ DATA
 
 dataframe=pd.read_csv('BostonHausing.csv')
+
+
 '''
 #### NORMALITY TEST
 nameindex = list(dataframe.columns)
@@ -166,7 +131,7 @@ for n in range(len(nof_list)):
 print("Optimum number of features: %d" %nof)
 print("Score with %d features: %f" % (nof, r_sq))
 
-'''
+
 #######   Build the Multivariate Linear Regression Model
 ### LIST WITH FEATURES
 #listnames = ['CRIM', 'ZN', 'AGE', 'DIS', 'RAD', 'LSTAT']
@@ -261,5 +226,5 @@ plt.xlabel('Observation numers')
 plt.hist(lm.resid,density=True)
 plt.savefig('residuals_plot.png',dpi=125)
 
-
+'''
 print('~~~~~~~~~')
