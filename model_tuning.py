@@ -137,44 +137,25 @@ X=X[list_factors]
 
 
 #create pipeline
-fs = SelectKBest(score_func=f_regression, k=4)
+fs = SelectKBest(score_func=f_regression, k=6)
 X_new = fs.fit_transform(X,y.values.ravel())
 mask = fs.get_support(indices=True)
 mask = np.asarray(mask)
 rfactors = np.asarray(list_factors)
 rfactors = rfactors[mask]
 print('list with features with Select KBest',rfactors)
-
-# feature importance !!!
-#mask = np.asarray(mask)
-#rfactors = np.asarray(rfactors)
-#print('list with features with RFE',rfactors[mask])
-
-model = KNeighborsRegressor(n_neighbors=5)
-model_fit = model.fit(X,y.values.ravel())
-pipeline = Pipeline(steps=[('s',fs),('m',model)])
 # evaluate model
-cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
-pipeline_fit = pipeline.fit(X,y)
-n_scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='r2', cv=cv, n_jobs=-1)
-y_pred = pipeline_fit.predict(X)
-# report performance
-print('Rsq: %.3f (%.3f)' % (np.mean(n_scores), np.std(n_scores)))
+cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=200)
 
-
-print('start calculation with AdaBoost')
-# Using AdaBoostRegressor
-model_abr=AdaBoostRegressor(base_estimator=model)
-# specify parameters and distributions to sample from
-param_dist = {'n_estimators':sp_randint(50,400),'learning_rate': sp_randint(1,20),'loss': ['linear', 'square', 'exponential']}
+# define the grid
+param_dict = {'model__n_neighbors':[2,3,4,5,6,7,8,9]}
+model = KNeighborsRegressor()
+pipeline = Pipeline(steps=[('SelectKBest',fs),('model',model)])
 # run randomized search
 n_iter_search = 20
-random_search = RandomizedSearchCV(model_abr, param_distributions=param_dist,cv=cv, n_iter=n_iter_search,verbose=0, n_jobs=-1, random_state=200)
+#random_search = RandomizedSearchCV(pipeline, param_distributions=param_dict,cv=cv, n_iter=n_iter_search,verbose=0, n_jobs=-1, random_state=200,scoring='r2')
+random_search = RandomizedSearchCV(pipeline, param_distributions=param_dict,cv=cv, n_iter=n_iter_search,verbose=0, n_jobs=-1, random_state=200,scoring='neg_mean_squared_error')
 random_search.fit(X_new, y.values.ravel())
-# report(random_search.cv_results_)
 print ('Best Parameters: ', random_search.best_params_)
 results = cross_val_score(random_search.best_estimator_,X_new,y.values.ravel(),scoring='r2', cv=cv, n_jobs=-1)
-print ("Accuracy AdaBoost CV: ", results.mean())
-
-#Best Parameters:  {'learning_rate': 2, 'loss': 'exponential', 'n_estimators': 329}
-#Accuracy AdaBoost CV:  0.7930771772072109
+print ("R2 KNN: ", results.mean(),results.std())
