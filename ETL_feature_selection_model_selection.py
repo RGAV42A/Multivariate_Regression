@@ -1,3 +1,4 @@
+
 import subprocess
 
 #out = subprocess.run(['/bin/bash', '-c','dir'],shell=True)
@@ -48,18 +49,14 @@ df.columns = ['CRIM', 'ZN', 'INDUS', 'CHAS',
               'TAX', 'PTRATIO', 'B', 'LSTAT', 'MEDV']
 df.head()
 
-#print('df.shape',df.shape)
+#prepare X and y
 x_shape = df.shape[1]-1
 y_shape = df.shape[1]
-#print('x_shape',x_shape)
-#print('y_shape',y_shape)
+
 X = df.iloc[:,0:x_shape]
-#print(X.head())
 y = df.iloc[:,y_shape-1:y_shape]
-#print(y.head())
 ## list with factors
 list_factors = X.columns.values
-#print(list_factors)
 # calculate duplicates
 dups = df.duplicated()
 # report if there are any duplicates
@@ -68,7 +65,6 @@ print('\nany duplicates:',dups.any())
 print('\nlist all duplicate rows:',df[dups])
 
 # summarize the number of unique values in each column
-
 print('\nnumber of unique values in each column:',X.nunique())
 
 # summarize the number of unique values in each column
@@ -78,7 +74,6 @@ for ix in list_factors:
     print('{}, {}, {}%'.format(ix, num, percentage))
 
 # remove cols with low uniqie numbers
-
 del X['ZN']
 
 ## list with factors
@@ -105,7 +100,7 @@ X, y = X.iloc[mask, :], y.iloc[mask]
 # summarize the shape of the updated training dataset
 print('dataset after outlier cleaning:',X.shape, y.shape)
 
-### multi var model with MinMaxScaler
+### transform X with MinMaxScaler
 # define the scaler
 scaler = MinMaxScaler()
 # fit on the  dataset
@@ -115,6 +110,7 @@ y[['MEDV']] = scaler.fit_transform(y[['MEDV']])
 print(X.head())
 print(y.head())
 
+# remove the colinearity from X
 for i in np.arange(0,len(list_factors)):
     vif = [variance_inflation_factor(X[list_factors].values, ix) for ix in range(X[list_factors].shape[1])]
     maxloc = vif.index(max(vif))
@@ -126,7 +122,6 @@ for i in np.arange(0,len(list_factors)):
     else:
         break
 print('Final variables:', list_factors)
-
 
 X=X[list_factors]
 
@@ -142,7 +137,7 @@ clf = tree.DecisionTreeRegressor()
 models = [lr,knr,clf,huber]
 
 score_funcs = [f_regression,mutual_info_regression]
-#score_funcs = [mutual_info_regression]
+
 scfunc_iy = range(len(score_funcs))
 best_score = 999
 # enumerate each number of features
@@ -155,13 +150,10 @@ for model in models:
             # create pipeline
             model = model
             fs = SelectKBest(score_func=score_func, k=k)
-            #fs.fit(X,y)
-            #mask = fs.get_support(indices=True)
-            #print('list with features with Select KBest',list(map(lambda x :rfactors[x],mask)))
             pipeline = Pipeline(steps=[('sel',fs), ('lr', model)])
             # evaluate the model
-            cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
-            scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='neg_root_mean_squared_error', cv=cv,n_jobs=-1)
+            cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=500)
+            scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='neg_mean_squared_error', cv=cv,n_jobs=-1)
             # convert scores to positive
             scores = np.absolute(scores)
             scor = np.mean(scores)
@@ -173,7 +165,7 @@ for model in models:
             # summarize the results
             print('>%d %.3f (%.3f)' % (k, np.mean(scores), np.std(scores)))
         # plot model performance for comparison
-        pyplot.figure(1,figsize = (10,60))
+        pyplot.figure(1,figsize = (8,50))
         pyplot.subplot(9,1,ix)
         pyplot.title('{} {}'.format(str(model),str(score_func)))
         pyplot.boxplot(results, labels=num_features, showmeans=True)

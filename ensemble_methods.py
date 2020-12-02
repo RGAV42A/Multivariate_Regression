@@ -1,3 +1,4 @@
+
 import subprocess
 
 #out = subprocess.run(['/bin/bash', '-c','dir'],shell=True)
@@ -10,33 +11,18 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.ensemble import IsolationForest
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.inspection import permutation_importance
-from sklearn.linear_model import LinearRegression
-from sklearn.feature_selection import RFE
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import RepeatedStratifiedKFold
 from matplotlib import pyplot
-from sklearn.model_selection import KFold
 from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import mutual_info_regression
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-from sklearn.linear_model import HuberRegressor,RANSACRegressor
 from sklearn.feature_selection import f_regression
-from sklearn import tree
 from sklearn.model_selection import RepeatedKFold
-import statsmodels.api as sm
-import scipy.stats as stats
-from sklearn.model_selection import RandomizedSearchCV
-from sklearn.ensemble import AdaBoostRegressor
-from scipy.stats import randint as sp_randint
 import warnings
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.ensemble import AdaBoostRegressor
 
 warnings.simplefilter('ignore')
 
@@ -53,18 +39,14 @@ df.columns = ['CRIM', 'ZN', 'INDUS', 'CHAS',
               'TAX', 'PTRATIO', 'B', 'LSTAT', 'MEDV']
 df.head()
 
-#print('df.shape',df.shape)
+#prepare X and y
 x_shape = df.shape[1]-1
 y_shape = df.shape[1]
-#print('x_shape',x_shape)
-#print('y_shape',y_shape)
+
 X = df.iloc[:,0:x_shape]
-#print(X.head())
 y = df.iloc[:,y_shape-1:y_shape]
-#print(y.head())
 ## list with factors
 list_factors = X.columns.values
-#print(list_factors)
 # calculate duplicates
 dups = df.duplicated()
 # report if there are any duplicates
@@ -73,7 +55,6 @@ print('\nany duplicates:',dups.any())
 print('\nlist all duplicate rows:',df[dups])
 
 # summarize the number of unique values in each column
-
 print('\nnumber of unique values in each column:',X.nunique())
 
 # summarize the number of unique values in each column
@@ -83,7 +64,6 @@ for ix in list_factors:
     print('{}, {}, {}%'.format(ix, num, percentage))
 
 # remove cols with low uniqie numbers
-
 del X['ZN']
 
 ## list with factors
@@ -110,7 +90,7 @@ X, y = X.iloc[mask, :], y.iloc[mask]
 # summarize the shape of the updated training dataset
 print('dataset after outlier cleaning:',X.shape, y.shape)
 
-### multi var model with MinMaxScaler
+### transform X with MinMaxScaler
 # define the scaler
 scaler = MinMaxScaler()
 # fit on the  dataset
@@ -120,6 +100,7 @@ y[['MEDV']] = scaler.fit_transform(y[['MEDV']])
 print(X.head())
 print(y.head())
 
+# remove the colinearity from X
 for i in np.arange(0,len(list_factors)):
     vif = [variance_inflation_factor(X[list_factors].values, ix) for ix in range(X[list_factors].shape[1])]
     maxloc = vif.index(max(vif))
@@ -132,60 +113,41 @@ for i in np.arange(0,len(list_factors)):
         break
 print('Final variables:', list_factors)
 
-
 X=X[list_factors]
 
-
-#create pipeline
 fs = SelectKBest(score_func=f_regression, k=6)
-fs.fit(X,y.values.ravel())
-mask = fs.get_support(indices=True)
-mask = np.asarray(mask)
-rfactors = np.asarray(list_factors)
-rfactors = rfactors[mask]
-print('list with features with Select KBest',rfactors)
+X_new = fs.fit_transform(X,y.values.ravel())
 
-model = KNeighborsRegressor(n_neighbors=5)
-model_fit = model.fit(X,y.values.ravel())
-pipeline = Pipeline(steps=[('s',fs),('m',model)])
-# evaluate model
+# ensembles
+ensembles = []
+ensembles.append(('AB',AdaBoostRegressor()))
+ensembles.append(('GBM',GradientBoostingRegressor()))
+ensembles.append(('RF',RandomForestRegressor(n_estimators=10)))
+ensembles.append(('ET',ExtraTreesRegressor(n_estimators=10)))
+
 cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
-pipeline_fit = pipeline.fit(X,y)
-n_scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='r2', cv=cv, n_jobs=-1)
-y_pred = pipeline_fit.predict(X)
-# report performance
-print('Rsq: %.3f (%.3f)' % (np.mean(n_scores), np.std(n_scores)))
+results = []
+names = []
+for name, model in ensembles:
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=500)
+    cv_results = cross_val_score(model, X_new, y, cv=cv, scoring='r2')
+    # convert scores to positive
+    cv_results = np.absolute(cv_results)
+    results.append(cv_results)
+    names.append(name)
+    msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
+    print(msg)
 
+# Compare Algorithms
+fig = pyplot.figure()
+fig.suptitle('Scaled Ensemble Algorithm Comparison')
+ax = fig.add_subplot(111)
+pyplot.boxplot(results)
+ax.set_xticklabels(names)
+pyplot.savefig('ensemble_methods.png',dpi=80)
 
-# plot results
-resid= (y.values.ravel() - y_pred)
-# residuals vs y
-pyplot.close('all')
-pyplot.figure(figsize=pyplot.figaspect(0.3))
-pyplot.scatter(range(len(y)),y_pred, color='darkorange', label='residuals')
-pyplot.axis('tight')
-pyplot.legend()
-pyplot.title("Residuals")
-pyplot.tight_layout()
-pyplot.savefig('Residuals.png',dpi=70)
-
-
-####  Histogram of standardized deviance residuals
-pyplot.close('all')
-resid_std = stats.zscore(resid)
-pyplot.hist(resid_std, bins=25)
-pyplot.title('Histogram of standardized deviance residuals')
-pyplot.savefig('Histogram.png',dpi=70)
-#### RESUDUALS PLOT
-
-pyplot.close('all')
-pyplot.figure(figsize=pyplot.figaspect(0.3))
-pyplot.scatter(range(len(y)),y, color='darkorange', label='data')
-pyplot.plot(range(len(y)),y_pred, color='navy', label='prediction')
-pyplot.axis('tight')
-pyplot.legend()
-pyplot.title("{}".format(str(model)))
-pyplot.tight_layout()
-pyplot.savefig('Model_Regressor.png',dpi=70)
-
+# AB: 0.806038 (0.085640)
+# GBM: 0.847989 (0.093469)
+# RF: 0.820097 (0.107935)
+# ET: 0.854929 (0.050555)
 
