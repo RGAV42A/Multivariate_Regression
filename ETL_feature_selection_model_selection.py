@@ -32,6 +32,7 @@ from sklearn.linear_model import HuberRegressor,RANSACRegressor
 from sklearn.feature_selection import f_regression
 from sklearn import tree
 from sklearn.model_selection import RepeatedKFold
+from sklearn.model_selection import RandomizedSearchCV
 import warnings
 
 warnings.simplefilter('ignore')
@@ -88,7 +89,6 @@ transform = VarianceThreshold()
 X_sel = transform.fit_transform(X)
 print('variance threshold for feature selection after',X_sel.shape)
 
-
 # summarize the shape of the training dataset
 print('\ndataset before outlier cleaning:',X.shape, y.shape)
 # identify outliers
@@ -100,15 +100,17 @@ X, y = X.iloc[mask, :], y.iloc[mask]
 # summarize the shape of the updated training dataset
 print('dataset after outlier cleaning:',X.shape, y.shape)
 
+
+
 ### transform X with MinMaxScaler
 # define the scaler
 scaler = MinMaxScaler()
 # fit on the  dataset
-X[list_factors] = scaler.fit_transform(X[list_factors])
-y[['MEDV']] = scaler.fit_transform(y[['MEDV']])
+X[list_factors] = MinMaxScaler().fit_transform(X[list_factors])
+y = MinMaxScaler().fit_transform(y)
 
 print(X.head())
-print(y.head())
+print(y[:5,:])
 
 # remove the colinearity from X
 for i in np.arange(0,len(list_factors)):
@@ -123,56 +125,60 @@ for i in np.arange(0,len(list_factors)):
         break
 print('Final variables:', list_factors)
 
-X=X[list_factors]
+X=X[list_factors].values
 
 
 ###################################################
-# define number of features to evaluate
-num_features = [i for i in range(2, X.shape[1])]
-knr = KNeighborsRegressor(n_neighbors=5)
-ransac = RANSACRegressor()
-huber = HuberRegressor()
-lr = LinearRegression()
-clf = tree.DecisionTreeRegressor()
-models = [lr,knr,clf,huber]
 
-score_funcs = [f_regression,mutual_info_regression]
+# Algorithms
+models = []
+models.append(('KNR', KNeighborsRegressor(n_neighbors=5)))
+models.append(('HUBER', HuberRegressor()))
+models.append(('LR', LinearRegression()))
+models.append(('DTR', tree.DecisionTreeRegressor()))
+# define the evaluation method
+cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=200)
 
-scfunc_iy = range(len(score_funcs))
-best_score = 999
-# enumerate each number of features
-results = list()
-ix = 1
-for model in models:
-    for score_func in score_funcs:
-        print(str(model),str(score_func))
-        for k in num_features:
-            # create pipeline
-            model = model
-            fs = SelectKBest(score_func=score_func, k=k)
-            pipeline = Pipeline(steps=[('sel',fs), ('lr', model)])
-            # evaluate the model
-            cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=500)
-            scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='neg_mean_squared_error', cv=cv,n_jobs=-1)
-            # convert scores to positive
-            scores = np.absolute(scores)
-            scor = np.mean(scores)
-            if scor < best_score:
-                best_score = scor
-                score_list = []
-                score_list.append('{},{} with {} features and score {} '.format(str(model),str(score_func),k,best_score))
-            results.append(scores)
-            # summarize the results
-            print('>%d %.3f (%.3f)' % (k, np.mean(scores), np.std(scores)))
-        # plot model performance for comparison
-        pyplot.figure(1,figsize = (8,50))
-        pyplot.subplot(9,1,ix)
-        pyplot.title('{} {}'.format(str(model),str(score_func)))
-        pyplot.boxplot(results, labels=num_features, showmeans=True)
-        pyplot.tight_layout()
-        pyplot.savefig('SelectKBest.png')
-        results = list()
-        ix+=1
-    print(score_list)
+r2_results = []
+mse_results = []
+names = []
+for name,model in models:
+    fs = SelectKBest()
+    pipeline = Pipeline(steps=[('anova',fs), ('model', model)])
+    # define the grid
+    grid = {'anova__k':[i+1 for i in range(X.shape[1])],'anova__score_func':[f_regression,mutual_info_regression]}
+    # define the grid search
+    search = RandomizedSearchCV(pipeline, grid, scoring='neg_mean_squared_error', n_jobs=-1, cv=cv,n_iter=20,random_state=200)
+    # perform the search
+    search.fit(X, y.ravel())
+    print('\nModel name:',name)
+    print("Best: %f using %s" % (search.best_score_, search.best_params_))
+    mse_result = cross_val_score(search.best_estimator_, X, y.ravel(), cv=cv, scoring='neg_mean_squared_error')
+    r2_result = cross_val_score(search.best_estimator_, X, y.ravel(), cv=cv, scoring='r2')
+    # convert scores to positive
+    mse_result = np.absolute(mse_result)
+    mse_results.append(mse_result)
+    r2_results.append(r2_result)
+    names.append(name)
+    msg = "%s: %f (%f)" % (name, np.mean(mse_results), np.std(mse_results))
+    print(msg)
+    msg = "%s: %f (%f)" % (name, np.mean(r2_results), np.std(r2_results))
+    print(msg)
 
-# 'KNeighborsRegressor(),function f_regression with 6 features
+    # Compare Algorithms
+    fig = pyplot.figure()
+    fig.suptitle('Model Comparison')
+
+    ax = fig.add_subplot(121)
+    ax.set_title('R2')
+    pyplot.boxplot(r2_results)
+    ax.set_xticklabels(names)
+    ax = fig.add_subplot(122)
+    ax.set_title('MSE')
+    pyplot.boxplot(mse_results)
+    ax.set_xticklabels(names)
+    pyplot.tight_layout()
+    pyplot.savefig('features_model_selection.png',dpi=100)
+
+
+

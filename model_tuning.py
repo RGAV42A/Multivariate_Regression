@@ -33,7 +33,7 @@ from sklearn import tree
 from sklearn.model_selection import RepeatedKFold
 import statsmodels.api as sm
 import scipy.stats as stats
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import AdaBoostRegressor
 from scipy.stats import randint as sp_randint
 import warnings
@@ -151,11 +151,13 @@ cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=200)
 param_dict = {'model__n_neighbors':[2,3,4,5,6,7,8,9]}
 model = KNeighborsRegressor()
 pipeline = Pipeline(steps=[('SelectKBest',fs),('model',model)])
-# run randomized search
-n_iter_search = 20
-#random_search = RandomizedSearchCV(pipeline, param_distributions=param_dict,cv=cv, n_iter=n_iter_search,verbose=0, n_jobs=-1, random_state=200,scoring='r2')
-random_search = RandomizedSearchCV(pipeline, param_distributions=param_dict,cv=cv, n_iter=n_iter_search,verbose=0, n_jobs=-1, random_state=200,scoring='neg_mean_squared_error')
-random_search.fit(X_new, y.values.ravel())
-print ('Best Parameters: ', random_search.best_params_)
-results = cross_val_score(random_search.best_estimator_,X_new,y.values.ravel(),scoring='r2', cv=cv, n_jobs=-1)
+# run grid search
+search = GridSearchCV(pipeline, param_grid=param_dict,cv=cv,verbose=0, n_jobs=-1,scoring='neg_mean_squared_error')
+search.fit(X_new, y.values.ravel())
+print ('Best Parameters: ', search.best_params_)
+results = cross_val_score(search.best_estimator_,X_new,y.values.ravel(),scoring='r2', cv=cv, n_jobs=-1)
 print ("R2 KNN: ", results.mean(),results.std())
+
+#Best Parameters:  {'model__n_neighbors': 3}
+#R2 KNN:  0.83 (0.0574)
+

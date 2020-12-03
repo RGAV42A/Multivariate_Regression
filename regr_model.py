@@ -145,11 +145,11 @@ rfactors = np.asarray(list_factors)
 rfactors = rfactors[mask]
 print('list with features with Select KBest',rfactors)
 
-model = KNeighborsRegressor(n_neighbors=5)
+model = KNeighborsRegressor(n_neighbors=3)
 model_fit = model.fit(X,y.values.ravel())
 pipeline = Pipeline(steps=[('s',fs),('m',model)])
 # evaluate model
-cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=200)
 pipeline_fit = pipeline.fit(X,y)
 n_scores = cross_val_score(pipeline, X, y.values.ravel(), scoring='r2', cv=cv, n_jobs=-1)
 y_pred = pipeline_fit.predict(X)
