@@ -18,12 +18,14 @@ from sklearn.feature_selection import SelectKBest
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.feature_selection import f_regression
 from sklearn.model_selection import RepeatedKFold
-import warnings
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.ensemble import AdaBoostRegressor
-
+from scipy.stats import randint
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import RandomizedSearchCV
+import warnings
 warnings.simplefilter('ignore')
 
 
@@ -95,10 +97,10 @@ print('dataset after outlier cleaning:',X.shape, y.shape)
 scaler = MinMaxScaler()
 # fit on the  dataset
 X[list_factors] = scaler.fit_transform(X[list_factors])
-y[['MEDV']] = scaler.fit_transform(y[['MEDV']])
+y = scaler.fit_transform(y)
 
 print(X.head())
-print(y.head())
+print(y[:5,:])
 
 # remove the colinearity from X
 for i in np.arange(0,len(list_factors)):
@@ -115,39 +117,73 @@ print('Final variables:', list_factors)
 
 X=X[list_factors]
 
-fs = SelectKBest(score_func=f_regression, k=6)
-X_new = fs.fit_transform(X,y.values.ravel())
-
 # ensembles
 ensembles = []
 ensembles.append(('AB',AdaBoostRegressor()))
 ensembles.append(('GBM',GradientBoostingRegressor()))
-ensembles.append(('RF',RandomForestRegressor(n_estimators=10)))
-ensembles.append(('ET',ExtraTreesRegressor(n_estimators=10)))
+ensembles.append(('RF',RandomForestRegressor()))
+ensembles.append(('ET',ExtraTreesRegressor()))
 
-cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
-results = []
+r2_results = []
+mse_results = []
 names = []
+
+# evaluate model
+cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=200)
+
 for name, model in ensembles:
-    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=500)
-    cv_results = cross_val_score(model, X_new, y, cv=cv, scoring='r2')
+    fs = SelectKBest(score_func=f_regression)
+    pipeline = Pipeline(steps=[('anova',fs), ('model', model)])
+    # define the grid
+    grid = {'anova__k':[i+1 for i in range(X.shape[1])],'model__n_estimators':randint(10,400)}
+    # define the grid search
+    search = RandomizedSearchCV(pipeline, grid, scoring='neg_mean_squared_error', n_jobs=-1, cv=cv, random_state=500)
+    search.fit(X, y.ravel())
+    print('\n',name)
+    print ('Best Parameters: ', search.best_params_)
+
+    cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=500)
+    mse_result = cross_val_score(search.best_estimator_, X, y.ravel(), cv=cv, scoring='neg_mean_squared_error')
+    r2_result = cross_val_score(search.best_estimator_, X, y.ravel(), cv=cv, scoring='r2')
     # convert scores to positive
-    cv_results = np.absolute(cv_results)
-    results.append(cv_results)
+    mse_result = np.absolute(mse_result)
+    mse_results.append(mse_result)
+    r2_results.append(r2_result)
     names.append(name)
-    msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
+    msg = "%s: %f (%f)" % (name, np.mean(mse_results), np.std(mse_results))
+    print(msg)
+    msg = "%s: %f (%f)" % (name, np.mean(r2_results), np.std(r2_results))
     print(msg)
 
 # Compare Algorithms
 fig = pyplot.figure()
-fig.suptitle('Scaled Ensemble Algorithm Comparison')
-ax = fig.add_subplot(111)
-pyplot.boxplot(results)
+fig.suptitle('Ensemble Algorithm Comparison')
+ax = fig.add_subplot(121)
+ax.set_title('R2')
+pyplot.boxplot(r2_results)
 ax.set_xticklabels(names)
+ax = fig.add_subplot(122)
+ax.set_title('MSE')
+pyplot.boxplot(mse_results)
+ax.set_xticklabels(names)
+pyplot.tight_layout()
 pyplot.savefig('ensemble_methods.png',dpi=80)
 
-# AB: 0.806038 (0.085640)
-# GBM: 0.847989 (0.093469)
-# RF: 0.820097 (0.107935)
-# ET: 0.854929 (0.050555)
-
+'''
+AB
+Best Parameters:  {'anova__k': 6, 'model__n_estimators': 247}
+AB: 0.007990 (0.001661)
+AB: 0.808937 (0.046910)
+ GBM
+Best Parameters:  {'anova__k': 7, 'model__n_estimators': 114}
+GBM: 0.007206 (0.001943)
+GBM: 0.829694 (0.051646)
+ RF
+Best Parameters:  {'anova__k': 6, 'model__n_estimators': 297}
+RF: 0.007102 (0.002031)
+RF: 0.832396 (0.051862)
+ ET
+Best Parameters:  {'anova__k': 6, 'model__n_estimators': 247}
+ET: 0.006700 (0.001970)
+ET: 0.841891 (0.049272)
+'''
